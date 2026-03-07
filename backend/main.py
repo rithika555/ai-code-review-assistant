@@ -1,0 +1,1 @@
+print("AI Code Review Assistant is starting...")
