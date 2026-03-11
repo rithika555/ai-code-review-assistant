@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Code Review Assistant</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app-wrapper">
+
+    <!-- ── Header ─────────────────────────────────────────── -->
+    <header class="header">
+      <div class="header-icon">🔍</div>
+      <div class="header-text">
+        <h1>AI Code Review Assistant</h1>
+        <p>Static analysis · Security scanning · Quality scoring</p>
+      </div>
+      <div class="header-badge">v1.0 · Python</div>
+    </header>
+
+    <!-- ── Tabs ───────────────────────────────────────────── -->
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="paste">
+        <span>📋</span> Paste Code
+      </button>
+      <button class="tab-btn" data-tab="github">
+        <span>🐙</span> GitHub Repo
+      </button>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════
+         Panel 1 — Paste & Review
+    ═══════════════════════════════════════════════════════ -->
+    <div id="panel-paste" class="panel active">
+      <div class="form-row">
+        <label for="code-input">Paste your Python code below</label>
+        <textarea
+          id="code-input"
+          placeholder="# Paste your Python code here...
+def calculate_discount(price, discount=[], admin_password='secret123'):
+    try:
+        result = price - (price * discount[0] / 100)
+        print('Discount applied:', result)
+        return result
+    except:
+        return price"
+          spellcheck="false"
+          autocomplete="off"
+        ></textarea>
+      </div>
+
+      <div class="flex items-center gap-8" style="margin-bottom: 28px;">
+        <button class="btn btn-primary" id="btn-review" data-label="Run Analysis">
+          <span class="spinner hidden"></span>
+          <span class="btn-label">Run Analysis</span>
+        </button>
+      </div>
+
+      <!-- Results output -->
+      <div id="review-output">
+        <div class="state-empty">
+          <div class="icon">🔍</div>
+          <p>Paste your code above and click <strong>Run Analysis</strong> to get structured suggestions.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════
+         Panel 2 — GitHub Repo
+    ═══════════════════════════════════════════════════════ -->
+    <div id="panel-github" class="panel">
+      <div class="form-row">
+        <label for="github-url">GitHub Repository URL</label>
+        <input
+          type="text"
+          id="github-url"
+          placeholder="https://github.com/owner/repository"
+          autocomplete="off"
+          spellcheck="false"
+        />
+      </div>
+
+      <div class="form-row">
+        <label for="github-token">
+          Personal Access Token
+          <span style="color: var(--text-dim); text-transform: none; letter-spacing: 0; font-size: 0.68rem;">
+            — optional, increases rate limits (never stored)
+          </span>
+        </label>
+        <input
+          type="password"
+          id="github-token"
+          placeholder="ghp_xxxxxxxxxxxxxxxx"
+          autocomplete="off"
+        />
+      </div>
+
+      <div class="flex items-center gap-8" style="margin-bottom: 28px;">
+        <button class="btn btn-primary" id="btn-github" data-label="Analyse Repository">
+          <span class="spinner hidden"></span>
+          <span class="btn-label">Analyse Repository</span>
+        </button>
+      </div>
+
+      <!-- GitHub Results output -->
+      <div id="github-output">
+        <div class="state-empty">
+          <div class="icon">🐙</div>
+          <p>Enter a public GitHub repository URL and click <strong>Analyse Repository</strong>.</p>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /app-wrapper -->
+
+  <script src="script.js"></script>
+</body>
+</html>
