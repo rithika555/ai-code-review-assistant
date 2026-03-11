@@ -61,7 +61,7 @@ README.md
 
 Clone the repository:
 
-git clone https://github.com/YOUR_USERNAME/ai-code-review-assistant.git
+git clone https://github.com/rithika555/ai-code-review-assistant.git
 
 Navigate into the project folder:
 
