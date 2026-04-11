@@ -1,6 +1,6 @@
 # AI Code Review Assistant
 
-An intelligent code review tool that analyzes source code and GitHub repositories to provide automated feedback on code quality, potential issues, and improvements.
+An intelligent code review tool that analyzes source code and GitHub repositories to provide automated feedback on code quality, potential issues and improvements.
 
 ## Overview
 
