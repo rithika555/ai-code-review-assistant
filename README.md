@@ -143,7 +143,8 @@ The `AIReviewEngine` class in `base_reviewer.py` is the single point of contact 
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/your-username/ai-code-review-assistant.git
+git clone https://github.com/rithika555<img width="191" height="30" alt="image" src="https://github.com/user-attachments/assets/bbc25f2a-eb70-424f-b5b0-881199e3c166" />
+/ai-code-review-assistant.git
 cd ai-code-review-assistant
 
 # 2. Install dependencies
