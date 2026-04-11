@@ -3,117 +3,272 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>AI Code Review Assistant</title>
-  <link rel="stylesheet" href="style.css" />
+  <title>CodeSentinel — AI Review Engine</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;600;700;900&family=Exo+2:wght@300;400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css" />
 </head>
 <body>
-  <div class="app-wrapper">
 
-    <!-- ── Header ─────────────────────────────────────────── -->
-    <header class="header">
-      <div class="header-icon">🔍</div>
-      <div class="header-text">
-        <h1>AI Code Review Assistant</h1>
-        <p>Static analysis · Security scanning · Quality scoring</p>
+  <!-- Background layers -->
+  <canvas id="bg-canvas"></canvas>
+  <div class="noise"></div>
+  <div class="grid-overlay"></div>
+
+  <!-- Boot sequence -->
+  <div class="boot-screen" id="boot-screen">
+    <div class="boot-content">
+      <div class="boot-logo">CODESENTINEL</div>
+      <div class="boot-sub">AI REVIEW ENGINE v2.4.1</div>
+      <div class="boot-bar-wrap"><div class="boot-bar" id="boot-bar"></div></div>
+      <div class="boot-status" id="boot-status">INITIALIZING NEURAL MODULES...</div>
+    </div>
+  </div>
+
+  <!-- Main app -->
+  <div class="app" id="app">
+
+    <!-- Header -->
+    <header class="hud-header">
+      <div class="header-left">
+        <div class="logo-mark">⬡</div>
+        <div class="logo-text">
+          <span class="logo-main">CODESENTINEL</span>
+          <span class="logo-sub">AI REVIEW ENGINE</span>
+        </div>
       </div>
-      <div class="header-badge">v1.0 · Python</div>
+      <div class="header-center">
+        <div class="hud-stat" id="stat-reviews">
+          <span class="stat-val">0</span>
+          <span class="stat-lbl">REVIEWS</span>
+        </div>
+        <div class="hud-divider"></div>
+        <div class="hud-stat">
+          <span class="stat-val" id="stat-lang">--</span>
+          <span class="stat-lbl">LANGUAGE</span>
+        </div>
+        <div class="hud-divider"></div>
+        <div class="hud-stat">
+          <span class="stat-val" id="stat-risk">--</span>
+          <span class="stat-lbl">RISK</span>
+        </div>
+      </div>
+      <div class="header-right">
+        <div class="status-dot active"></div>
+        <span class="status-text">ENGINE ONLINE</span>
+      </div>
     </header>
 
-    <!-- ── Tabs ───────────────────────────────────────────── -->
-    <div class="tabs">
-      <button class="tab-btn active" data-tab="paste">
-        <span>📋</span> Paste Code
-      </button>
-      <button class="tab-btn" data-tab="github">
-        <span>🐙</span> GitHub Repo
-      </button>
-    </div>
+    <!-- Main layout -->
+    <div class="workspace">
 
-    <!-- ═══════════════════════════════════════════════════════
-         Panel 1 — Paste & Review
-    ═══════════════════════════════════════════════════════ -->
-    <div id="panel-paste" class="panel active">
-      <div class="form-row">
-        <label for="code-input">Paste your Python code below</label>
-        <textarea
-          id="code-input"
-          placeholder="# Paste your Python code here...
-def calculate_discount(price, discount=[], admin_password='secret123'):
-    try:
-        result = price - (price * discount[0] / 100)
-        print('Discount applied:', result)
-        return result
-    except:
-        return price"
-          spellcheck="false"
-          autocomplete="off"
-        ></textarea>
-      </div>
-
-      <div class="flex items-center gap-8" style="margin-bottom: 28px;">
-        <button class="btn btn-primary" id="btn-review" data-label="Run Analysis">
-          <span class="spinner hidden"></span>
-          <span class="btn-label">Run Analysis</span>
-        </button>
-      </div>
-
-      <!-- Results output -->
-      <div id="review-output">
-        <div class="state-empty">
-          <div class="icon">🔍</div>
-          <p>Paste your code above and click <strong>Run Analysis</strong> to get structured suggestions.</p>
+      <!-- LEFT: Input panel -->
+      <aside class="panel panel-input">
+        <div class="panel-title">
+          <span class="panel-num">01</span>
+          <span>INPUT VECTOR</span>
+          <div class="panel-corner"></div>
         </div>
-      </div>
-    </div>
 
-    <!-- ═══════════════════════════════════════════════════════
-         Panel 2 — GitHub Repo
-    ═══════════════════════════════════════════════════════ -->
-    <div id="panel-github" class="panel">
-      <div class="form-row">
-        <label for="github-url">GitHub Repository URL</label>
-        <input
-          type="text"
-          id="github-url"
-          placeholder="https://github.com/owner/repository"
-          autocomplete="off"
-          spellcheck="false"
-        />
-      </div>
-
-      <div class="form-row">
-        <label for="github-token">
-          Personal Access Token
-          <span style="color: var(--text-dim); text-transform: none; letter-spacing: 0; font-size: 0.68rem;">
-            — optional, increases rate limits (never stored)
-          </span>
-        </label>
-        <input
-          type="password"
-          id="github-token"
-          placeholder="ghp_xxxxxxxxxxxxxxxx"
-          autocomplete="off"
-        />
-      </div>
-
-      <div class="flex items-center gap-8" style="margin-bottom: 28px;">
-        <button class="btn btn-primary" id="btn-github" data-label="Analyse Repository">
-          <span class="spinner hidden"></span>
-          <span class="btn-label">Analyse Repository</span>
-        </button>
-      </div>
-
-      <!-- GitHub Results output -->
-      <div id="github-output">
-        <div class="state-empty">
-          <div class="icon">🐙</div>
-          <p>Enter a public GitHub repository URL and click <strong>Analyse Repository</strong>.</p>
+        <div class="tab-strip">
+          <button class="tab-btn active" data-tab="paste">
+            <span class="tab-icon">⌨</span> CODE
+          </button>
+          <button class="tab-btn" data-tab="repo">
+            <span class="tab-icon">⬡</span> REPO
+          </button>
+          <button class="tab-btn" data-tab="pr">
+            <span class="tab-icon">⟁</span> PR
+          </button>
         </div>
-      </div>
+
+        <!-- Paste tab -->
+        <div class="tab-pane active" id="tab-paste">
+          <div class="field">
+            <label class="field-label">FILENAME <span class="opt">[OPTIONAL]</span></label>
+            <input class="hud-input" type="text" id="filename-input" placeholder="main.py · index.js · App.tsx" />
+          </div>
+          <div class="field">
+            <label class="field-label">SOURCE CODE</label>
+            <div class="editor-wrap">
+              <div class="editor-gutter" id="line-numbers">1</div>
+              <textarea class="code-editor" id="code-input" placeholder="// paste code here..." spellcheck="false"></textarea>
+            </div>
+          </div>
+          <button class="scan-btn" id="btn-review-code">
+            <span class="scan-icon">◈</span>
+            <span class="scan-text">INITIATE SCAN</span>
+            <span class="scan-arrow">→</span>
+          </button>
+        </div>
+
+        <!-- Repo tab -->
+        <div class="tab-pane" id="tab-repo">
+          <div class="field">
+            <label class="field-label">REPOSITORY URL</label>
+            <input class="hud-input" type="text" id="repo-url" placeholder="https://github.com/owner/repo" />
+          </div>
+          <div class="field">
+            <label class="field-label">ACCESS TOKEN <span class="opt">[OPTIONAL]</span></label>
+            <input class="hud-input" type="password" id="repo-token" placeholder="ghp_••••••••••••" />
+          </div>
+          <button class="scan-btn" id="btn-review-repo">
+            <span class="scan-icon">◈</span>
+            <span class="scan-text">SCAN REPOSITORY</span>
+            <span class="scan-arrow">→</span>
+          </button>
+        </div>
+
+        <!-- PR tab -->
+        <div class="tab-pane" id="tab-pr">
+          <div class="field">
+            <label class="field-label">PULL REQUEST URL</label>
+            <input class="hud-input" type="text" id="pr-url" placeholder="https://github.com/owner/repo/pull/42" />
+          </div>
+          <div class="field">
+            <label class="field-label">ACCESS TOKEN <span class="opt">[OPTIONAL]</span></label>
+            <input class="hud-input" type="password" id="pr-token" placeholder="ghp_••••••••••••" />
+          </div>
+          <button class="scan-btn" id="btn-review-pr">
+            <span class="scan-icon">◈</span>
+            <span class="scan-text">REVIEW PULL REQUEST</span>
+            <span class="scan-arrow">→</span>
+          </button>
+        </div>
+
+        <!-- Lang chips -->
+        <div class="lang-matrix">
+          <div class="lang-matrix-label">SUPPORTED LANGUAGES</div>
+          <div class="lang-grid" id="lang-grid"></div>
+        </div>
+      </aside>
+
+      <!-- CENTER: Results -->
+      <main class="panel panel-results">
+        <div class="panel-title">
+          <span class="panel-num">02</span>
+          <span>ANALYSIS OUTPUT</span>
+          <span class="issue-counter" id="issue-counter"></span>
+          <div class="panel-corner"></div>
+        </div>
+
+        <div class="results-body" id="results-body">
+
+          <!-- Idle state -->
+          <div class="idle-state" id="idle-state">
+            <div class="idle-hex">⬡</div>
+            <div class="idle-title">AWAITING INPUT</div>
+            <div class="idle-sub">Submit code or a repository URL to begin analysis</div>
+            <div class="idle-dots">
+              <span></span><span></span><span></span>
+            </div>
+          </div>
+
+          <!-- Loading state -->
+          <div class="scan-state hidden" id="scan-state">
+            <div class="radar-wrap">
+              <div class="radar-ring r1"></div>
+              <div class="radar-ring r2"></div>
+              <div class="radar-ring r3"></div>
+              <div class="radar-sweep"></div>
+              <div class="radar-center">⬡</div>
+            </div>
+            <div class="scan-label">DEEP SCAN IN PROGRESS</div>
+            <div class="scan-sub" id="scan-sub">Analyzing code structure...</div>
+            <div class="scan-log" id="scan-log"></div>
+          </div>
+
+          <!-- Cards container -->
+          <div id="cards-container" class="cards-container hidden"></div>
+
+        </div>
+      </main>
+
+      <!-- RIGHT: Metrics -->
+      <aside class="panel panel-metrics">
+        <div class="panel-title">
+          <span class="panel-num">03</span>
+          <span>THREAT MATRIX</span>
+          <div class="panel-corner"></div>
+        </div>
+
+        <div class="metrics-body" id="metrics-body">
+
+          <div class="metrics-idle" id="metrics-idle">
+            <div class="idle-hex small">◎</div>
+            <div class="idle-sub">Metrics load after scan</div>
+          </div>
+
+          <div class="metrics-live hidden" id="metrics-live">
+
+            <!-- Score -->
+            <div class="score-block">
+              <svg class="score-svg" viewBox="0 0 140 140">
+                <defs>
+                  <linearGradient id="scoreGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="#00ffe7"/>
+                    <stop offset="100%" stop-color="#0077ff"/>
+                  </linearGradient>
+                </defs>
+                <circle class="score-track" cx="70" cy="70" r="56"/>
+                <circle class="score-arc" id="score-arc" cx="70" cy="70" r="56"
+                  stroke-dasharray="351.86" stroke-dashoffset="351.86"/>
+                <polygon class="score-hex" points="70,20 110,45 110,95 70,120 30,95 30,45"/>
+              </svg>
+              <div class="score-overlay">
+                <div class="score-number" id="score-number">--</div>
+                <div class="score-label">QUALITY</div>
+              </div>
+            </div>
+
+            <!-- Risk badge -->
+            <div class="risk-badge-wrap">
+              <div class="risk-badge" id="risk-badge">
+                <span class="risk-icon">⚠</span>
+                <span class="risk-text" id="risk-text">--</span>
+              </div>
+            </div>
+
+            <!-- Stat bars -->
+            <div class="stat-bars">
+              <div class="stat-bar-row">
+                <span class="sbar-label">SECURITY</span>
+                <div class="sbar-track"><div class="sbar-fill cyan" id="bar-security"></div></div>
+                <span class="sbar-val" id="val-security">--</span>
+              </div>
+              <div class="stat-bar-row">
+                <span class="sbar-label">PERFORMANCE</span>
+                <div class="sbar-track"><div class="sbar-fill amber" id="bar-perf"></div></div>
+                <span class="sbar-val" id="val-perf">--</span>
+              </div>
+              <div class="stat-bar-row">
+                <span class="sbar-label">MAINTAINABILITY</span>
+                <div class="sbar-track"><div class="sbar-fill green" id="bar-maint"></div></div>
+                <span class="sbar-val" id="val-maint">--</span>
+              </div>
+            </div>
+
+            <!-- AI Summary -->
+            <div class="ai-summary">
+              <div class="ai-summary-header">
+                <span class="ai-dot"></span> ENGINE ANALYSIS
+              </div>
+              <p class="ai-summary-text" id="ai-summary-text"></p>
+            </div>
+
+            <!-- File list for multi -->
+            <div class="file-roster hidden" id="file-roster">
+              <div class="roster-label">FILES SCANNED</div>
+              <div id="roster-items"></div>
+            </div>
+
+          </div>
+        </div>
+      </aside>
+
     </div>
+  </div>
 
-  </div><!-- /app-wrapper -->
-
-  <script src="script.js"></script>
+  <script src="/static/script.js"></script>
 </body>
 </html>

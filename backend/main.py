@@ -1,36 +1,19 @@
-"""
-main.py
-FastAPI application entry point for the AI Code Review Assistant.
-
-Run with:
-    uvicorn backend.main:app --reload
-
-Endpoints:
-    POST /review          — Review a pasted code snippet
-    POST /review-github   — Review all files in a GitHub repository
-    GET  /health          — Health check
-"""
+from dotenv import load_dotenv
+load_dotenv()
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+from pydantic import BaseModel
 from typing import Optional
+import os
 
-from backend.reviewer import review_code
-from backend.github_reviewer import review_github_repo
+from backend.services.analysis_service import AnalysisService
+from backend.github_reviewer import GitHubReviewer
 
+app = FastAPI(title="AI Code Review Assistant", version="1.0.0")
 
-# ─────────────────────────────────────────────
-# App Initialisation
-# ─────────────────────────────────────────────
-
-app = FastAPI(
-    title="AI Code Review Assistant",
-    description="Intelligent code review for Python projects with GitHub integration.",
-    version="1.0.0",
-)
-
-# Allow requests from the frontend (served from file:// or localhost)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -39,69 +22,74 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+analysis_service = AnalysisService()
+github_reviewer = GitHubReviewer()
 
-# ─────────────────────────────────────────────
-# Request / Response Schemas
-# ─────────────────────────────────────────────
 
 class CodeReviewRequest(BaseModel):
-    code: str = Field(..., min_length=1, description="Source code to review")
-    filename: Optional[str] = Field(None, description="Optional filename for language detection")
+    code: str
+    filename: Optional[str] = None
 
 
-class GitHubReviewRequest(BaseModel):
-    repo_url: str = Field(..., description="Full GitHub repository URL")
-    token: Optional[str] = Field(None, description="Optional GitHub personal access token")
+class RepoReviewRequest(BaseModel):
+    repo_url: str
+    github_token: Optional[str] = None
 
 
-# ─────────────────────────────────────────────
-# Routes
-# ─────────────────────────────────────────────
-
-@app.get("/health", tags=["Utility"])
-def health_check():
-    """Simple liveness probe."""
-    return {"status": "ok", "service": "AI Code Review Assistant"}
+class PRReviewRequest(BaseModel):
+    pr_url: str
+    github_token: Optional[str] = None
 
 
-@app.post("/review", tags=["Code Review"])
-def review_code_endpoint(request: CodeReviewRequest):
-    """
-    Analyse a code snippet and return structured review results.
-
-    Returns:
-        language, quality_score, risk_level, total_issues, suggestions
-    """
-    if not request.code.strip():
-        raise HTTPException(status_code=400, detail="Code cannot be empty.")
-
+@app.post("/review")
+async def review_code(request: CodeReviewRequest):
     try:
-        result = review_code(request.code, filename=request.filename)
+        print(f"[DEBUG] /review called, code length: {len(request.code)}")
+        print(f"[DEBUG] GROQ_API_KEY set: {bool(os.environ.get('GROQ_API_KEY'))}")
+        result = await analysis_service.analyze_code(request.code, request.filename)
+        print(f"[DEBUG] Success — language: {result.get('language')}, score: {result.get('score')}")
+        return result
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
+        print(f"[ERROR] /review failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
-    return result
 
-
-@app.post("/review-github", tags=["GitHub Review"])
-def review_github_endpoint(request: GitHubReviewRequest):
-    """
-    Fetch and analyse all source files in a GitHub repository.
-
-    Returns:
-        owner, repo, files_reviewed, overall_score, overall_risk,
-        total_issues, file_results
-    """
-    if not request.repo_url.strip():
-        raise HTTPException(status_code=400, detail="Repository URL cannot be empty.")
-
+@app.post("/review_repo")
+async def review_repo(request: RepoReviewRequest):
     try:
-        result = review_github_repo(request.repo_url, token=request.token)
-    except ValueError as e:
-        raise HTTPException(status_code=422, detail=str(e))
-    except RuntimeError as e:
-        raise HTTPException(status_code=502, detail=str(e))
+        results = await github_reviewer.review_repository(
+            request.repo_url, request.github_token
+        )
+        return results
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"GitHub review failed: {str(e)}")
+        print(f"[ERROR] /review_repo failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
-    return result
+
+@app.post("/review_pr")
+async def review_pr(request: PRReviewRequest):
+    try:
+        results = await github_reviewer.review_pull_request(
+            request.pr_url, request.github_token
+        )
+        return results
+    except Exception as e:
+        print(f"[ERROR] /review_pr failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/health")
+async def health():
+    return {
+        "status": "ok",
+        "groq_key_set": bool(os.environ.get("GROQ_API_KEY")),
+    }
+
+
+frontend_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend")
+if os.path.exists(frontend_path):
+    app.mount("/static", StaticFiles(directory=frontend_path), name="static")
+
+    @app.get("/")
+    async def serve_frontend():
+        return FileResponse(os.path.join(frontend_path, "index.html"))

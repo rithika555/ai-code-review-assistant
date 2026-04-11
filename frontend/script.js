@@ -1,341 +1,431 @@
-/**
- * script.js
- * Client-side logic for the AI Code Review Assistant dashboard.
- * Handles tab switching, API calls, and dynamic rendering of results.
- */
-
 const API_BASE = "http://127.0.0.1:8000";
 
-// ─────────────────────────────────────────────
-// Utility Helpers
-// ─────────────────────────────────────────────
+const LANGUAGES = [
+  "Python","JavaScript","TypeScript","Java","C++","C","C#",
+  "Go","Rust","PHP","Ruby","Swift","Kotlin","Scala","R"
+];
 
-const $ = (sel, ctx = document) => ctx.querySelector(sel);
-const $$ = (sel, ctx = document) => [...ctx.querySelectorAll(sel)];
+const SCAN_MESSAGES = [
+  "Parsing abstract syntax tree...",
+  "Running vulnerability pattern matching...",
+  "Analyzing algorithmic complexity...",
+  "Checking security boundaries...",
+  "Evaluating architecture patterns...",
+  "Cross-referencing best practices...",
+  "Generating improvement vectors...",
+  "Compiling threat assessment...",
+];
 
-function escapeHtml(str) {
-  if (!str) return "";
-  return String(str)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
+let reviewCount = 0;
 
-function scoreClass(score) {
-  if (score >= 80) return "score-high";
-  if (score >= 65) return "score-medium";
-  if (score >= 40) return "score-low";
-  return "score-bad";
-}
-
-function scoreBarColor(score) {
-  if (score >= 80) return "var(--green)";
-  if (score >= 65) return "var(--yellow)";
-  if (score >= 40) return "var(--orange)";
-  return "var(--red)";
-}
-
-function sevIcon(severity) {
-  const icons = { critical: "🔴", bug: "🟠", warning: "🟡", info: "🔵" };
-  return icons[severity] || "⚪";
-}
-
-function riskDot(risk) {
-  const dots = { Clean: "🟢", Low: "🔵", Medium: "🟡", High: "🔴" };
-  return dots[risk] || "⚪";
-}
-
-// ─────────────────────────────────────────────
-// Tab Switching
-// ─────────────────────────────────────────────
-
-$$(".tab-btn").forEach(btn => {
-  btn.addEventListener("click", () => {
-    $$(".tab-btn").forEach(b => b.classList.remove("active"));
-    $$(".panel").forEach(p => p.classList.remove("active"));
-    btn.classList.add("active");
-    $(`#panel-${btn.dataset.tab}`).classList.add("active");
-  });
+// ── BOOT SEQUENCE ─────────────────────────────────────────────────────────
+window.addEventListener("DOMContentLoaded", () => {
+  runBoot();
+  initCanvas();
+  renderLangChips();
+  setupTabs();
+  setupLineNumbers();
+  setupButtons();
 });
 
-// ─────────────────────────────────────────────
-// Suggestion Card Builder
-// ─────────────────────────────────────────────
+function runBoot() {
+  const bar = document.getElementById("boot-bar");
+  const status = document.getElementById("boot-status");
+  const screen = document.getElementById("boot-screen");
+  const app = document.getElementById("app");
 
-function buildSuggestionCard(s, index) {
-  const lineInfo = s.line ? `Line ${s.line}` : "";
-  const exFix = s.example_fix
-    ? `<div class="card-section">
-        <div class="card-section-label"><span>💡</span> Example Fix</div>
-        <pre class="card-code">${escapeHtml(s.example_fix)}</pre>
-       </div>`
-    : "";
-  const benefit = s.benefit
-    ? `<div class="card-section">
-        <div class="card-section-label"><span>✅</span> Benefit</div>
-        <div class="card-benefit">${escapeHtml(s.benefit)}</div>
-       </div>`
-    : "";
+  const messages = [
+    [0,  "INITIALIZING NEURAL MODULES..."],
+    [20, "LOADING LANGUAGE ANALYZERS..."],
+    [45, "CALIBRATING THREAT MATRIX..."],
+    [65, "CONNECTING TO REVIEW ENGINE..."],
+    [85, "RUNNING SELF-DIAGNOSTICS..."],
+    [100,"SYSTEM READY"],
+  ];
 
-  return `
-    <div class="suggestion-card" id="card-${index}" style="animation-delay: ${index * 0.05}s">
-      <div class="card-header" onclick="toggleCard('card-${index}')">
-        <div class="card-header-left">
-          <span class="sev-badge sev-${s.severity}">${sevIcon(s.severity)} ${escapeHtml(s.severity)}</span>
-          <span class="card-type">${escapeHtml(s.type)}</span>
-        </div>
-        ${lineInfo ? `<span class="card-line">${lineInfo}</span>` : ""}
-        <span class="card-toggle">▾</span>
-      </div>
-      <div class="card-body">
-        <div class="card-section">
-          <div class="card-section-label"><span>⚠️</span> Issue</div>
-          <div class="card-message">${escapeHtml(s.message)}</div>
-        </div>
-        <div class="card-section">
-          <div class="card-section-label"><span>🔧</span> Fix</div>
-          <div class="card-fix">${escapeHtml(s.fix)}</div>
-        </div>
-        ${exFix}
-        ${benefit}
-      </div>
-    </div>`;
-}
-
-function toggleCard(id) {
-  const card = document.getElementById(id);
-  if (card) card.classList.toggle("open");
-}
-
-// ─────────────────────────────────────────────
-// Summary Banner Builder
-// ─────────────────────────────────────────────
-
-function buildSummary({ language, quality_score, risk_level, total_issues }) {
-  return `
-    <div class="summary-grid">
-      <div class="summary-card">
-        <div class="summary-label">Language</div>
-        <div class="summary-value" style="font-size:1.2rem; color: var(--accent)">${escapeHtml(language)}</div>
-      </div>
-      <div class="summary-card">
-        <div class="summary-label">Quality Score</div>
-        <div class="summary-value ${scoreClass(quality_score)}">${quality_score}</div>
-        <div class="score-bar-wrapper">
-          <div class="score-bar-fill" style="width: 0%; background: ${scoreBarColor(quality_score)}"
-               data-target="${quality_score}"></div>
-        </div>
-        <div class="summary-sub">out of 100</div>
-      </div>
-      <div class="summary-card">
-        <div class="summary-label">Risk Level</div>
-        <div class="summary-value" style="font-size:1.1rem">
-          <span class="risk-badge risk-${risk_level}">${riskDot(risk_level)} ${escapeHtml(risk_level)}</span>
-        </div>
-      </div>
-      <div class="summary-card">
-        <div class="summary-label">Issues Found</div>
-        <div class="summary-value ${total_issues > 0 ? "score-bad" : "score-high"}">${total_issues}</div>
-        <div class="summary-sub">${total_issues === 0 ? "no issues 🎉" : "need attention"}</div>
-      </div>
-    </div>`;
-}
-
-function animateScoreBars() {
-  $$(".score-bar-fill").forEach(bar => {
-    const target = parseInt(bar.dataset.target, 10);
-    requestAnimationFrame(() => {
-      setTimeout(() => { bar.style.width = `${target}%`; }, 80);
-    });
-  });
-}
-
-// ─────────────────────────────────────────────
-// Code Review — Paste Tab
-// ─────────────────────────────────────────────
-
-const reviewBtn   = $("#btn-review");
-const codeInput   = $("#code-input");
-const reviewOut   = $("#review-output");
-
-reviewBtn.addEventListener("click", async () => {
-  const code = codeInput.value.trim();
-  if (!code) {
-    showAlert(reviewOut, "Please paste some code before reviewing.", "error");
-    return;
-  }
-
-  setLoading(reviewBtn, true);
-  reviewOut.innerHTML = "";
-
-  try {
-    const resp = await fetch(`${API_BASE}/review`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code, filename: "snippet.py" }),
-    });
-
-    if (!resp.ok) {
-      const err = await resp.json();
-      throw new Error(err.detail || `HTTP ${resp.status}`);
+  let i = 0;
+  const tick = () => {
+    if (i >= messages.length) {
+      setTimeout(() => {
+        screen.classList.add("gone");
+        app.classList.add("visible");
+      }, 400);
+      return;
     }
+    const [pct, msg] = messages[i++];
+    bar.style.width = pct + "%";
+    status.textContent = msg;
+    setTimeout(tick, 320);
+  };
+  setTimeout(tick, 200);
+}
 
-    const data = await resp.json();
-    renderCodeReview(data, reviewOut);
+// ── CANVAS BACKGROUND ─────────────────────────────────────────────────────
+function initCanvas() {
+  const canvas = document.getElementById("bg-canvas");
+  const ctx = canvas.getContext("2d");
+  let W, H, nodes = [], animId;
 
-  } catch (err) {
-    showAlert(reviewOut, `Error: ${err.message}`, "error");
-  } finally {
-    setLoading(reviewBtn, false);
+  function resize() {
+    W = canvas.width = window.innerWidth;
+    H = canvas.height = window.innerHeight;
   }
-});
 
-function renderCodeReview(data, container) {
-  const summary = buildSummary(data);
-  const cards = data.suggestions.length
-    ? data.suggestions.map((s, i) => buildSuggestionCard(s, i)).join("")
-    : `<div class="state-empty">
-         <div class="icon">✅</div>
-         <p>No issues found. Your code looks clean!</p>
-       </div>`;
+  function spawnNodes() {
+    nodes = [];
+    const count = Math.floor((W * H) / 22000);
+    for (let i = 0; i < count; i++) {
+      nodes.push({
+        x: Math.random() * W,
+        y: Math.random() * H,
+        vx: (Math.random() - 0.5) * 0.25,
+        vy: (Math.random() - 0.5) * 0.25,
+        r: Math.random() * 1.5 + 0.5,
+      });
+    }
+  }
 
-  container.innerHTML = `
-    ${summary}
-    <div class="section-header">
-      <div class="section-title">Suggestions (${data.total_issues})</div>
+  function draw() {
+    ctx.clearRect(0, 0, W, H);
+    // move
+    nodes.forEach(n => {
+      n.x += n.vx; n.y += n.vy;
+      if (n.x < 0) n.x = W; if (n.x > W) n.x = 0;
+      if (n.y < 0) n.y = H; if (n.y > H) n.y = 0;
+    });
+    // edges
+    for (let i = 0; i < nodes.length; i++) {
+      for (let j = i + 1; j < nodes.length; j++) {
+        const dx = nodes[i].x - nodes[j].x;
+        const dy = nodes[i].y - nodes[j].y;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        if (dist < 130) {
+          ctx.beginPath();
+          ctx.moveTo(nodes[i].x, nodes[i].y);
+          ctx.lineTo(nodes[j].x, nodes[j].y);
+          ctx.strokeStyle = `rgba(0,200,255,${0.08 * (1 - dist/130)})`;
+          ctx.lineWidth = 0.5;
+          ctx.stroke();
+        }
+      }
+    }
+    // dots
+    nodes.forEach(n => {
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(0,200,255,0.35)";
+      ctx.fill();
+    });
+    animId = requestAnimationFrame(draw);
+  }
+
+  resize(); spawnNodes(); draw();
+  window.addEventListener("resize", () => { resize(); spawnNodes(); });
+}
+
+// ── LANG CHIPS ────────────────────────────────────────────────────────────
+function renderLangChips() {
+  const grid = document.getElementById("lang-grid");
+  LANGUAGES.forEach(lang => {
+    const chip = document.createElement("div");
+    chip.className = "lang-chip";
+    chip.textContent = lang;
+    grid.appendChild(chip);
+  });
+}
+
+// ── TABS ──────────────────────────────────────────────────────────────────
+function setupTabs() {
+  document.querySelectorAll(".tab-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+      document.querySelectorAll(".tab-pane").forEach(p => p.classList.remove("active"));
+      btn.classList.add("active");
+      document.getElementById("tab-" + btn.dataset.tab).classList.add("active");
+    });
+  });
+}
+
+// ── LINE NUMBERS ──────────────────────────────────────────────────────────
+function setupLineNumbers() {
+  const ta = document.getElementById("code-input");
+  const gutter = document.getElementById("line-numbers");
+  ta.addEventListener("input", () => {
+    const lines = ta.value.split("\n").length;
+    gutter.textContent = Array.from({length: lines}, (_, i) => i + 1).join("\n");
+  });
+  ta.addEventListener("scroll", () => { gutter.scrollTop = ta.scrollTop; });
+}
+
+// ── BUTTONS ───────────────────────────────────────────────────────────────
+function setupButtons() {
+  document.getElementById("btn-review-code").addEventListener("click", reviewCode);
+  document.getElementById("btn-review-repo").addEventListener("click", reviewRepo);
+  document.getElementById("btn-review-pr").addEventListener("click", reviewPR);
+}
+
+async function reviewCode() {
+  const code = document.getElementById("code-input").value.trim();
+  const filename = document.getElementById("filename-input").value.trim();
+  if (!code) { flashInput("code-input"); return; }
+  await runReview(() =>
+    fetch(`${API_BASE}/review`, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ code, filename: filename || null }),
+    }).then(r => r.json())
+  , "single");
+}
+
+async function reviewRepo() {
+  const repo_url = document.getElementById("repo-url").value.trim();
+  const github_token = document.getElementById("repo-token").value.trim();
+  if (!repo_url) { flashInput("repo-url"); return; }
+  await runReview(() =>
+    fetch(`${API_BASE}/review_repo`, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ repo_url, github_token: github_token || null }),
+    }).then(r => r.json())
+  , "multi");
+}
+
+async function reviewPR() {
+  const pr_url = document.getElementById("pr-url").value.trim();
+  const github_token = document.getElementById("pr-token").value.trim();
+  if (!pr_url) { flashInput("pr-url"); return; }
+  await runReview(() =>
+    fetch(`${API_BASE}/review_pr`, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ pr_url, github_token: github_token || null }),
+    }).then(r => r.json())
+  , "multi");
+}
+
+// ── CORE RUNNER ───────────────────────────────────────────────────────────
+async function runReview(fetchFn, mode) {
+  setScanning(true);
+  clearResults();
+  try {
+    const data = await fetchFn();
+    if (data.error) throw new Error(data.error);
+    reviewCount++;
+    document.getElementById("stat-reviews").querySelector(".stat-val").textContent = reviewCount;
+    if (mode === "single") renderSingle(data);
+    else renderMulti(data);
+  } catch (err) {
+    showError(err.message);
+  } finally {
+    setScanning(false);
+  }
+}
+
+// ── RENDER SINGLE ─────────────────────────────────────────────────────────
+function renderSingle(data) {
+  const suggestions = data.suggestions || [];
+  showCards(suggestions);
+  updateMetrics(data);
+  document.getElementById("issue-counter").textContent =
+    suggestions.length + " ISSUE" + (suggestions.length !== 1 ? "S" : "");
+}
+
+// ── RENDER MULTI ──────────────────────────────────────────────────────────
+function renderMulti(data) {
+  const results = data.results || [];
+  const container = document.getElementById("cards-container");
+  container.classList.remove("hidden");
+  document.getElementById("idle-state").classList.add("hidden");
+
+  let total = 0;
+  results.forEach((result, ri) => {
+    if (!result.suggestions?.length) return;
+    const fh = document.createElement("div");
+    fh.className = "result-file-header";
+    fh.textContent = `▸ ${result.filename || result.language}  ·  SCORE: ${result.score ?? "--"}  ·  RISK: ${result.risk ?? "--"}`;
+    container.appendChild(fh);
+    result.suggestions.forEach((s, i) => {
+      container.appendChild(buildCard(s, i + ri * 10));
+      total++;
+    });
+  });
+
+  document.getElementById("issue-counter").textContent = total + " ISSUES";
+
+  if (data.summary) {
+    updateMetrics({
+      score: data.summary.average_score,
+      risk: data.summary.highest_risk,
+      language: (data.summary.languages_detected || []).join(", "),
+      ai_explanation: `Scanned ${data.summary.files_reviewed} file(s) across ${(data.summary.languages_detected||[]).join(", ")}. Detected ${data.summary.total_suggestions} total issues.`,
+      suggestions: [],
+    });
+    renderRoster(results);
+  }
+}
+
+// ── CARDS ─────────────────────────────────────────────────────────────────
+function showCards(suggestions) {
+  const container = document.getElementById("cards-container");
+  container.classList.remove("hidden");
+  document.getElementById("idle-state").classList.add("hidden");
+  suggestions.forEach((s, i) => container.appendChild(buildCard(s, i)));
+}
+
+function buildCard(s, index) {
+  const issue = s.issue || "";
+  const isSec  = /inject|xss|csrf|overflow|auth|secret|password|vuln|exploit/i.test(issue);
+  const isPerf = /performance|loop|memory|complexity|optim|slow|n\+1|leak/i.test(issue);
+  const typeClass = isSec ? "type-security" : isPerf ? "type-performance" : "type-default";
+
+  const card = document.createElement("div");
+  card.className = "suggestion-card";
+  card.style.animationDelay = (index * 70) + "ms";
+  card.innerHTML = `
+    <div class="card-header" onclick="toggleCard(this)">
+      <div class="card-type-bar ${typeClass}"></div>
+      <div class="card-issue">${esc(issue)}</div>
+      <div class="card-chevron">▼</div>
     </div>
-    <div class="suggestions-list">${cards}</div>`;
-
-  animateScoreBars();
+    <div class="card-body" style="display:none">
+      ${s.suggestion ? `<div><div class="cb-label">SUGGESTED FIX</div><div class="cb-text">${esc(s.suggestion)}</div></div>` : ""}
+      ${s.example    ? `<div><div class="cb-label">EXAMPLE CODE</div><pre class="cb-code">${esc(s.example)}</pre></div>` : ""}
+      ${s.benefit    ? `<div><span class="cb-benefit">✓ ${esc(s.benefit)}</span></div>` : ""}
+    </div>`;
+  return card;
 }
 
-// ─────────────────────────────────────────────
-// GitHub Review Tab
-// ─────────────────────────────────────────────
+// ── METRICS ───────────────────────────────────────────────────────────────
+function updateMetrics(data) {
+  const score = Math.round(+data.score || 0);
+  const risk  = (data.risk || "UNKNOWN").toUpperCase();
+  const lang  = data.language || data.detected_language || "--";
 
-const ghBtn    = $("#btn-github");
-const ghUrl    = $("#github-url");
-const ghToken  = $("#github-token");
-const ghOut    = $("#github-output");
+  // show live
+  document.getElementById("metrics-idle").classList.add("hidden");
+  document.getElementById("metrics-live").classList.remove("hidden");
 
-ghBtn.addEventListener("click", async () => {
-  const repo_url = ghUrl.value.trim();
-  const token    = ghToken.value.trim() || null;
+  // header stats
+  document.getElementById("stat-lang").textContent = lang.split(",")[0].trim().toUpperCase();
+  document.getElementById("stat-risk").textContent = risk;
 
-  if (!repo_url) {
-    showAlert(ghOut, "Please enter a GitHub repository URL.", "error");
-    return;
-  }
+  // score ring
+  document.getElementById("score-number").textContent = score;
+  const circ = 351.86;
+  document.getElementById("score-arc").style.strokeDashoffset =
+    circ - (score / 100) * circ;
 
-  setLoading(ghBtn, true);
-  ghOut.innerHTML = "";
+  // risk badge
+  const badge = document.getElementById("risk-badge");
+  const riskText = document.getElementById("risk-text");
+  badge.className = "risk-badge " + risk.toLowerCase();
+  riskText.textContent = risk + " RISK";
 
-  try {
-    const resp = await fetch(`${API_BASE}/review-github`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ repo_url, token }),
-    });
+  // bars (derive from score with slight variance)
+  const rv = (offset) => Math.min(100, Math.max(0, score + offset));
+  setBar("bar-security",  "val-security", rv(-8));
+  setBar("bar-perf",      "val-perf",     rv(4));
+  setBar("bar-maint",     "val-maint",    rv(6));
 
-    if (!resp.ok) {
-      const err = await resp.json();
-      throw new Error(err.detail || `HTTP ${resp.status}`);
-    }
+  // summary
+  document.getElementById("ai-summary-text").textContent =
+    data.ai_explanation || "";
+}
 
-    const data = await resp.json();
-    renderGitHubReview(data, ghOut);
+function setBar(barId, valId, value) {
+  setTimeout(() => {
+    document.getElementById(barId).style.width = value + "%";
+    document.getElementById(valId).textContent = value;
+  }, 300);
+}
 
-  } catch (err) {
-    showAlert(ghOut, `Error: ${err.message}`, "error");
-  } finally {
-    setLoading(ghBtn, false);
-  }
-});
+function renderRoster(results) {
+  const roster = document.getElementById("file-roster");
+  const items  = document.getElementById("roster-items");
+  roster.classList.remove("hidden");
+  items.innerHTML = results.map((r, i) => `
+    <div class="roster-item" onclick="scrollToFile(${i})">
+      <span class="roster-name">${esc(r.filename || r.language || "File " + (i+1))}</span>
+      <span class="roster-score">${r.score ?? "--"}</span>
+    </div>`).join("");
+}
 
-function renderGitHubReview(data, container) {
-  const repoInfo = `
-    <div class="summary-card" style="margin-bottom: 20px; background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 18px;">
-      <div class="summary-label">Repository</div>
-      <div style="font-size: 1rem; color: var(--accent); font-weight: 600; margin-top: 4px;">
-        ${escapeHtml(data.owner)} / ${escapeHtml(data.repo)}
-      </div>
-      <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 4px;">
-        ${data.files_reviewed} file${data.files_reviewed !== 1 ? "s" : ""} reviewed · ${data.total_issues} total issues
-      </div>
-    </div>`;
+// ── SCANNING STATE ────────────────────────────────────────────────────────
+let scanInterval;
+function setScanning(on) {
+  const scanEl  = document.getElementById("scan-state");
+  const idleEl  = document.getElementById("idle-state");
+  const logEl   = document.getElementById("scan-log");
+  const btns    = document.querySelectorAll(".scan-btn");
 
-  const summary = buildSummary({
-    language: "Multi-file",
-    quality_score: data.overall_score,
-    risk_level: data.overall_risk,
-    total_issues: data.total_issues,
-  });
-
-  let filesHtml = "";
-  if (!data.file_results || data.file_results.length === 0) {
-    filesHtml = `<div class="state-empty"><div class="icon">📁</div><p>${data.message || "No files were reviewed."}</p></div>`;
+  if (on) {
+    idleEl.classList.add("hidden");
+    scanEl.classList.remove("hidden");
+    btns.forEach(b => b.disabled = true);
+    let mi = 0;
+    logEl.textContent = "";
+    scanInterval = setInterval(() => {
+      logEl.textContent = SCAN_MESSAGES[mi % SCAN_MESSAGES.length];
+      mi++;
+    }, 900);
   } else {
-    filesHtml = data.file_results.map((file, fi) => buildFileAccordion(file, fi)).join("");
+    clearInterval(scanInterval);
+    scanEl.classList.add("hidden");
+    btns.forEach(b => b.disabled = false);
   }
-
-  container.innerHTML = `
-    ${repoInfo}
-    ${summary}
-    <div class="section-header">
-      <div class="section-title">File Results (${data.files_reviewed})</div>
-    </div>
-    ${filesHtml}`;
-
-  animateScoreBars();
 }
 
-function buildFileAccordion(file, fi) {
-  const cards = file.suggestions && file.suggestions.length
-    ? file.suggestions.map((s, si) => buildSuggestionCard(s, `${fi}-${si}`)).join("")
-    : `<div class="state-empty" style="padding: 24px 0;">
-         <p>✅ No issues found in this file.</p>
-       </div>`;
+// ── HELPERS ───────────────────────────────────────────────────────────────
+function clearResults() {
+  const c = document.getElementById("cards-container");
+  c.innerHTML = ""; c.classList.add("hidden");
+  document.getElementById("idle-state").classList.remove("hidden");
+  document.getElementById("issue-counter").textContent = "";
+  document.getElementById("metrics-idle").classList.remove("hidden");
+  document.getElementById("metrics-live").classList.add("hidden");
+  document.getElementById("file-roster").classList.add("hidden");
+  document.getElementById("stat-lang").textContent = "--";
+  document.getElementById("stat-risk").textContent = "--";
+}
 
-  return `
-    <div class="file-accordion" id="file-${fi}">
-      <div class="file-accordion-header" onclick="toggleFileAccordion('file-${fi}')">
-        <span class="file-icon">📄</span>
-        <span class="file-path" title="${escapeHtml(file.file)}">${escapeHtml(file.file)}</span>
-        <div class="file-meta">
-          <span class="risk-badge risk-${file.risk_level}" style="font-size:0.62rem; padding: 2px 8px;">
-            ${riskDot(file.risk_level)} ${escapeHtml(file.risk_level)}
-          </span>
-          <span style="font-size:0.72rem; color: var(--text-muted)">
-            Score: <strong class="${scoreClass(file.quality_score)}">${file.quality_score}</strong>
-          </span>
-          <span style="font-size:0.72rem; color: var(--text-dim)">${file.total_issues} issues</span>
-        </div>
-        <span class="card-toggle">▾</span>
-      </div>
-      <div class="file-accordion-body">
-        <div class="suggestions-list mt-16">${cards}</div>
+function showError(msg) {
+  const c = document.getElementById("cards-container");
+  c.classList.remove("hidden");
+  document.getElementById("idle-state").classList.add("hidden");
+  c.innerHTML = `
+    <div class="suggestion-card" style="border-color:rgba(255,51,85,0.3)">
+      <div class="card-header">
+        <div class="card-type-bar type-security"></div>
+        <div class="card-issue">ERROR — ${esc(msg)}</div>
       </div>
     </div>`;
 }
 
-function toggleFileAccordion(id) {
+function flashInput(id) {
   const el = document.getElementById(id);
-  if (el) el.classList.toggle("open");
+  el.style.borderColor = "var(--red)";
+  el.style.boxShadow = "0 0 0 3px rgba(255,51,85,0.15)";
+  setTimeout(() => { el.style.borderColor = ""; el.style.boxShadow = ""; }, 1200);
 }
 
-// ─────────────────────────────────────────────
-// UI Helpers
-// ─────────────────────────────────────────────
-
-function setLoading(btn, loading) {
-  btn.disabled = loading;
-  const spinner = btn.querySelector(".spinner");
-  const label   = btn.querySelector(".btn-label");
-  if (spinner) spinner.classList.toggle("hidden", !loading);
-  if (label)   label.textContent = loading ? "Analysing…" : btn.dataset.label;
+function toggleCard(header) {
+  const body = header.nextElementSibling;
+  const chev = header.querySelector(".card-chevron");
+  const open = body.style.display !== "none";
+  body.style.display = open ? "none" : "flex";
+  chev.classList.toggle("open", !open);
 }
 
-function showAlert(container, message, type = "error") {
-  container.innerHTML = `<div class="alert alert-${type}">${escapeHtml(message)}</div>`;
+function scrollToFile(index) {
+  const headers = document.querySelectorAll(".result-file-header");
+  if (headers[index]) headers[index].scrollIntoView({ behavior: "smooth", block: "start" });
 }
+
+function esc(str) {
+  return String(str)
+    .replace(/&/g,"&amp;").replace(/</g,"&lt;")
+    .replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+
+window.toggleCard   = toggleCard;
+window.scrollToFile = scrollToFile;
